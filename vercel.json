@@ -1,0 +1,17 @@
+{
+    "buids":[{
+        "src" : "mango_fusion/wsgi.py",
+        "use": "@vercel/python",
+        "config": {
+            "maxLambdaSize": "15mb",
+            "runtime": "python3.12.3"
+        }
+    }],
+    "routes":[
+        {
+            "src": "/(.*)",
+            "dest": "mango_fusion/wsgi.py"
+        }
+        
+    ]
+}

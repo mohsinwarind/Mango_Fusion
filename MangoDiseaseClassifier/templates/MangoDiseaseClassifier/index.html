@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mango Disease Classifier</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .transition-section {
+      transition: all 0.4s ease;
+      max-height: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .transition-section.visible {
+      max-height: 300px;
+      opacity: 1;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-green-100 via-yellow-50 to-orange-100 min-h-screen flex items-center justify-center px-4 py-10">
+  <div class="bg-white rounded-2xl shadow-lg w-full max-w-6xl p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row gap-8">
+
+    <!-- LEFT SIDE -->
+    <div class="w-full lg:w-1/2">
+      <h1 class="text-2xl sm:text-3xl font-bold text-center text-green-700 mb-6">🍃 Mango Disease Classifier</h1>
+
+      <form method="post" enctype="multipart/form-data" class="space-y-6" id="prediction-form">
+        {% csrf_token %}
+
+        <!-- Model Selection -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Select Model:</label>
+          <div class="flex flex-wrap gap-4">
+            {% for radio in form.model_choice %}
+              <label class="inline-flex items-center">
+                {{ radio.tag }}
+                <span class="ml-2 text-sm text-gray-800">{{ radio.choice_label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Input Mode -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Select Input Mode:</label>
+          <div class="flex flex-wrap gap-4">
+            {% for radio in form.mode %}
+              <label class="inline-flex items-center">
+                {{ radio.tag }}
+                <span class="ml-2 text-sm text-gray-800">{{ radio.choice_label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Leaf Upload -->
+        <div id="leaf-input" class="transition-section overflow-hidden">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Leaf Image:</label>
+          {{ form.leaf_image }}
+        </div>
+
+        <!-- Fruit Upload -->
+        <div id="fruit-input" class="transition-section overflow-hidden">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Fruit Image:</label>
+          {{ form.fruit_image }}
+        </div>
+
+        <!-- Buttons -->
+        <div class="pt-4 flex flex-col sm:flex-row gap-4">
+          <button type="submit" class="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg shadow hover:bg-green-700 transition text-center">
+            🔍 Predict
+          </button>
+          <button type="button" id="reset-btn" class="flex-1 bg-gray-300 text-gray-800 py-2 px-4 rounded-lg shadow hover:bg-gray-400 transition text-center">
+            🔄 Reset
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- RIGHT SIDE -->
+    <div class="w-full lg:w-1/2 flex flex-col items-center justify-center space-y-6">
+
+      {% if result %}
+        <div class="bg-green-100 text-green-800 font-medium p-3 rounded-xl shadow w-full text-center" id="result-box">
+          <span class="text-xl"><b>Result : </b> {{ result }}</span>
+        </div>
+      {% endif %}
+
+      {% if image_url %}
+        <div class="text-center w-full">
+          {% if image_url|length > 1 %}
+            <p class="mb-2 text-sm text-gray-700">Uploaded Images:</p>
+            <div class="flex flex-col sm:flex-row justify-center gap-4">
+              <div>
+                <p class="text-xs text-gray-600 mb-1 text-center">Leaf</p>
+                <img src="{{ image_url.0 }}" alt="Leaf Image" class="w-48 mx-auto rounded-lg shadow">
+              </div>
+              <div>
+                <p class="text-xs text-gray-600 mb-1 text-center">Fruit</p>
+                <img src="{{ image_url.1 }}" alt="Fruit Image" class="w-48 mx-auto rounded-lg shadow">
+              </div>
+            </div>
+          {% else %}
+            <p class="mb-2 text-sm text-gray-700">Uploaded Image:</p>
+            <img src="{{ image_url.0 }}" alt="Uploaded Image" class="mx-auto w-64 rounded-lg shadow-lg">
+          {% endif %}
+        </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div id="loading-spinner" class="hidden fixed inset-0 flex items-center justify-center bg-white bg-opacity-80 z-50">
+    <div class="flex flex-col items-center space-y-4">
+      <svg class="animate-spin h-10 w-10 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+      </svg>
+      <p class="text-lg font-medium text-green-700">Predicting... please hold on</p>
+    </div>
+  </div>
+
+  <!-- JS -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const form = document.getElementById('prediction-form');
+      const resetBtn = document.getElementById('reset-btn');
+      const resultBox = document.getElementById('result-box');
+      const modeInputs = document.querySelectorAll('input[name="mode"]');
+      const leafInput = document.getElementById('leaf-input');
+      const fruitInput = document.getElementById('fruit-input');
+
+      leafInput.classList.remove('visible');
+      fruitInput.classList.remove('visible');
+
+      function updateInputVisibility(selectedMode) {
+        if (selectedMode === 'leaf') {
+          leafInput.classList.add('visible');
+          fruitInput.classList.remove('visible');
+        } else if (selectedMode === 'fruit') {
+          leafInput.classList.remove('visible');
+          fruitInput.classList.add('visible');
+        } else if (selectedMode === 'fusion') {
+          leafInput.classList.add('visible');
+          fruitInput.classList.add('visible');
+        }
+      }
+
+      modeInputs.forEach(input => {
+        input.addEventListener('change', function () {
+          updateInputVisibility(this.value);
+        });
+        if (input.checked) {
+          updateInputVisibility(input.value);
+        }
+      });
+
+      form.addEventListener('submit', function () {
+        document.getElementById('loading-spinner').classList.remove('hidden');
+      });
+
+      resetBtn.addEventListener('click', function () {
+        form.reset();
+        document.querySelectorAll('input[type="radio"]').forEach(radio => radio.checked = false);
+        leafInput.classList.remove('visible');
+        fruitInput.classList.remove('visible');
+        if (resultBox) resultBox.remove();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+  </script>
+</body>
+</html>
